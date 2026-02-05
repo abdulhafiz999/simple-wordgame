@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Space Defender - Arcade Game</title>
+    <meta
+      name="description"
+      content="An exciting space shooter game where you defend Earth from incoming asteroids"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="stars"></div>
+    <div class="stars2"></div>
+    <div class="stars3"></div>
+
+    <div id="game-container">
+      <!-- Start Screen -->
+      <div id="start-screen" class="screen active">
+        <div class="logo-container">
+          <h1 class="game-title">
+            <span class="title-word">TYPE</span>
+            <span class="title-word">ATTACK</span>
+          </h1>
+          <div class="subtitle">
+            Type the Words Before They Reach the Bottom!
+          </div>
+        </div>
+
+        <div class="menu-options">
+          <button id="start-btn" class="menu-btn primary">
+            <span class="btn-icon">🚀</span>
+            <span>START MISSION</span>
+          </button>
+          <button id="instructions-btn" class="menu-btn">
+            <span class="btn-icon">📖</span>
+            <span>HOW TO PLAY</span>
+          </button>
+        </div>
+
+        <div class="stats-preview">
+          <div class="stat-item">
+            <div class="stat-label">High Score</div>
+            <div class="stat-value" id="high-score-display">0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Instructions Screen -->
+      <div id="instructions-screen" class="screen">
+        <div class="instructions-content">
+          <h2>Mission Briefing</h2>
+          <div class="instruction-grid">
+            <div class="instruction-item">
+              <div class="instruction-icon">⌨️</div>
+              <div class="instruction-text">
+                <strong>Type Words</strong>
+                <p>Type the falling words exactly as shown</p>
+              </div>
+            </div>
+            <div class="instruction-item">
+              <div class="instruction-icon">🎯</div>
+              <div class="instruction-text">
+                <strong>Match Letters</strong>
+                <p>Correct letters turn green, wrong ones turn red</p>
+              </div>
+            </div>
+            <div class="instruction-item">
+              <div class="instruction-icon">💥</div>
+              <div class="instruction-text">
+                <strong>Destroy Words</strong>
+                <p>Complete the word to make it disappear</p>
+              </div>
+            </div>
+            <div class="instruction-item">
+              <div class="instruction-icon">⭐</div>
+              <div class="instruction-text">
+                <strong>Score Points</strong>
+                <p>Longer words = more points!</p>
+              </div>
+            </div>
+          </div>
+          <button id="back-btn" class="menu-btn">
+            <span>BACK TO MENU</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Game Screen -->
+      <div id="game-screen" class="screen">
+        <div class="hud">
+          <div class="hud-item">
+            <div class="hud-label">SCORE</div>
+            <div class="hud-value" id="score">0</div>
+          </div>
+          <div class="hud-item">
+            <div class="hud-label">LIVES</div>
+            <div class="hud-value" id="lives">❤️❤️❤️</div>
+          </div>
+          <div class="hud-item">
+            <div class="hud-label">LEVEL</div>
+            <div class="hud-value" id="level">1</div>
+          </div>
+        </div>
+
+        <canvas id="game-canvas"></canvas>
+
+        <div class="typing-container">
+          <div class="typing-label">TYPE HERE:</div>
+          <div class="typing-input-display" id="typing-display">
+            <span id="typed-text" class="typed-text"></span>
+            <span id="cursor" class="cursor">|</span>
+          </div>
+          <div class="typing-hint">Start typing any visible word!</div>
+        </div>
+      </div>
+
+      <!-- Game Over Screen -->
+      <div id="gameover-screen" class="screen">
+        <div class="gameover-content">
+          <h2 class="gameover-title">MISSION FAILED</h2>
+          <div class="final-stats">
+            <div class="final-stat">
+              <div class="final-stat-label">Final Score</div>
+              <div class="final-stat-value" id="final-score">0</div>
+            </div>
+            <div class="final-stat">
+              <div class="final-stat-label">Level Reached</div>
+              <div class="final-stat-value" id="final-level">1</div>
+            </div>
+            <div
+              class="final-stat highlight"
+              id="new-record-container"
+              style="display: none"
+            >
+              <div class="final-stat-label">🏆 NEW HIGH SCORE! 🏆</div>
+            </div>
+          </div>
+          <div class="menu-options">
+            <button id="restart-btn" class="menu-btn primary">
+              <span class="btn-icon">🔄</span>
+              <span>PLAY AGAIN</span>
+            </button>
+            <button id="menu-btn" class="menu-btn">
+              <span class="btn-icon">🏠</span>
+              <span>MAIN MENU</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="game.js"></script>
+  </body>
+</html>
