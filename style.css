@@ -619,3 +619,51 @@ body {
     gap: 0.5rem;
   }
 }
+
+/* PAUSE SYSTEM STYLES */
+.pause-toggle-btn {
+  position: absolute;
+  top: 20px;
+  right: 80px; /* Positioned left of mute button */
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--text-primary);
+  font-size: 1.5rem;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  cursor: pointer;
+  backdrop-filter: blur(5px);
+  z-index: 100;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pause-toggle-btn:hover {
+  background: var(--accent-cyan);
+  box-shadow: 0 0 15px var(--accent-cyan);
+  transform: scale(1.1);
+}
+
+.overlay-screen {
+  background: rgba(10, 14, 39, 0.85); /* Semi-transparent dark background */
+  backdrop-filter: blur(8px);
+  z-index: 200;
+}
+
+.pause-content {
+  text-align: center;
+  animation: fadeIn 0.3s ease;
+}
+
+.menu-btn.danger {
+  border-color: var(--danger);
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.1), transparent);
+}
+
+.menu-btn.danger:hover {
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+  border-color: #f87171;
+}

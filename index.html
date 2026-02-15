@@ -95,6 +95,12 @@
 
       <!-- Game Screen -->
       <div id="game-screen" class="screen">
+        <!-- PAUSE BUTTON ADDED HERE -->
+        <button id="pause-btn" class="pause-toggle-btn">⏸️</button>
+        
+        <!-- MUTE BUTTON (Optional, based on your CSS) -->
+        <button id="mute-btn" class="icon-btn" style="top: 80px;">🔊</button>
+
         <div class="hud">
           <div class="hud-item">
             <div class="hud-label">SCORE</div>
@@ -119,6 +125,21 @@
             <span id="cursor" class="cursor">|</span>
           </div>
           <div class="typing-hint">Start typing any visible word!</div>
+        </div>
+      </div>
+
+      <!-- PAUSE OVERLAY SCREEN ADDED HERE -->
+      <div id="pause-screen" class="screen overlay-screen">
+        <div class="pause-content">
+          <h2 class="game-title">PAUSED</h2>
+          <div class="menu-options">
+            <button id="resume-btn" class="menu-btn primary">
+              <span>RESUME MISSION</span>
+            </button>
+            <button id="quit-btn" class="menu-btn danger">
+              <span>ABORT MISSION</span>
+            </button>
+          </div>
         </div>
       </div>
 

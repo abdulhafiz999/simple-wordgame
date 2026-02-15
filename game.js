@@ -77,7 +77,7 @@ const musicSystem = {
 
     if (gameState.isMuted) {
       this.stop();
-    } else if (gameState.isPlaying) {
+    } else if (gameState.isPlaying && !gameState.isPaused) {
       this.start();
     }
   },
@@ -128,7 +128,7 @@ const gameState = {
   level: 1,
   highScore: localStorage.getItem("highScore") || 0,
   isPlaying: false,
-  isPaused: false,
+  isPaused: false, // NEW: Track pause state
   isMuted: false,
   animationId: null,
   currentInput: "",
@@ -185,6 +185,31 @@ function setupEventListeners() {
     startGame();
   });
 
+  // Pause Button
+  const pauseBtn = document.getElementById("pause-btn");
+  if (pauseBtn) {
+    pauseBtn.addEventListener("click", () => {
+      togglePause();
+      pauseBtn.blur();
+    });
+  }
+
+  // Resume Button
+  const resumeBtn = document.getElementById("resume-btn");
+  if (resumeBtn) resumeBtn.addEventListener("click", togglePause);
+
+  // Quit Button
+  const quitBtn = document.getElementById("quit-btn");
+  if (quitBtn) {
+    quitBtn.addEventListener("click", () => {
+      togglePause(); // Unpause to clean up state
+      showScreen("start-screen");
+      musicSystem.stop();
+      resetGame();
+    });
+  }
+
+  // Mute Button
   const muteBtn = document.getElementById("mute-btn");
   if (muteBtn) muteBtn.addEventListener("click", () => musicSystem.toggle());
 
@@ -200,11 +225,37 @@ function setupEventListeners() {
     resetGame();
   });
 
-  document.addEventListener("keydown", handleTyping);
+  // Handle Escape key
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && gameState.isPlaying) {
+      togglePause();
+    }
+    handleTyping(e);
+  });
+}
+
+function togglePause() {
+  if (!gameState.isPlaying) return;
+
+  gameState.isPaused = !gameState.isPaused;
+
+  if (gameState.isPaused) {
+    // Pausing
+    cancelAnimationFrame(gameState.animationId);
+    audioCtx.suspend();
+    document.getElementById("pause-screen").classList.add("active");
+  } else {
+    // Resuming
+    audioCtx.resume();
+    document.getElementById("pause-screen").classList.remove("active");
+    lastWordSpawn = performance.now(); // Reset spawn timer to prevent jump
+    gameLoop();
+    canvas.focus();
+  }
 }
 
 function handleTyping(e) {
-  if (!gameState.isPlaying) return;
+  if (!gameState.isPlaying || gameState.isPaused) return; // Prevent typing while paused
   if (e.key.length > 1 && e.key !== "Backspace") return;
   e.preventDefault();
 
@@ -307,12 +358,14 @@ function resetGame() {
   gameState.lives = 3;
   gameState.level = 1;
   gameState.isPlaying = false;
+  gameState.isPaused = false;
   gameState.currentInput = "";
   gameState.activeWord = null;
   gameState.isFrozen = false;
   clearTimeout(gameState.freezeTimer);
   document.getElementById("game-canvas").style.borderColor = "";
   document.getElementById("game-canvas").style.boxShadow = "";
+  document.getElementById("pause-screen").classList.remove("active");
 
   words = [];
   particles = [];
@@ -326,7 +379,7 @@ function resetGame() {
 }
 
 function gameLoop(timestamp = 0) {
-  if (!gameState.isPlaying) return;
+  if (!gameState.isPlaying || gameState.isPaused) return; // Stop if paused
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   updateWords(timestamp);
