@@ -491,7 +491,7 @@ function spawnWord() {
     availableWords[Math.floor(Math.random() * availableWords.length)];
   const speed = config.word.minSpeed + gameState.level * 0.1;
 
-  ctx.font = `${config.word.fontSize}px 'Orbitron', sans-serif`;
+  ctx.font = `${config.word.fontSize}px 'Bungee', 'Space Grotesk', sans-serif`;
   const textWidth = ctx.measureText(text).width;
 
   const rng = Math.random();
@@ -518,13 +518,13 @@ function spawnWord() {
 }
 
 function drawWords() {
-  ctx.font = `bold ${config.word.fontSize}px 'Orbitron', sans-serif`;
-  ctx.lineWidth = 4;
+  ctx.font = `bold ${config.word.fontSize}px 'Bungee', 'Space Grotesk', sans-serif`;
+  ctx.lineWidth = 3;
   ctx.lineJoin = "round";
   ctx.strokeStyle = "#000000";
 
   words.forEach((word) => {
-    ctx.shadowBlur = 15;
+    ctx.shadowBlur = 8;
     ctx.shadowColor = word.color;
     let xOffset = 0;
     for (let i = 0; i < word.text.length; i++) {
@@ -538,7 +538,7 @@ function drawWords() {
       }
       ctx.shadowBlur = 0;
       ctx.strokeText(char, word.x + xOffset, word.y);
-      ctx.shadowBlur = 10;
+      ctx.shadowBlur = 6;
       ctx.fillText(char, word.x + xOffset, word.y);
       xOffset += ctx.measureText(char).width;
     }
@@ -552,7 +552,7 @@ function destroyWord(word) {
     word.x + ctx.measureText(word.text).width / 2,
     word.y,
     word.color,
-    30
+    20
   );
 
   if (word.type === "nuke") triggerNuke();
@@ -574,7 +574,7 @@ function triggerNuke() {
   }, 100);
 
   words.forEach((w) => {
-    createParticles(w.x, w.y, w.color, 15);
+    createParticles(w.x, w.y, w.color, 10);
     addScore(10);
   });
   words = [];
@@ -639,7 +639,7 @@ function addScore(points) {
   if (newLevel > gameState.level) {
     gameState.level = newLevel;
     updateHUD();
-    createParticles(canvas.width / 2, canvas.height / 2, "#a855f7", 50);
+    createParticles(canvas.width / 2, canvas.height / 2, "#a855f7", 28);
   }
 }
 
@@ -649,7 +649,7 @@ function loseLife() {
   if (gameState.lives <= 0) {
     gameOver();
   } else {
-    createParticles(canvas.width / 2, canvas.height - 50, "#ef4444", 30);
+    createParticles(canvas.width / 2, canvas.height - 50, "#ef4444", 18);
   }
 }
 
