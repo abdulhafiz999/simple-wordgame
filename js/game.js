@@ -1,136 +1,20 @@
-// ==================== AUDIO SYSTEM ====================
-const audio = {
-  ambience: new Audio("audio/space_ambience.ogg"),
-  click: new Audio("audio/click.wav"),
-  error: new Audio("audio/error_beep.wav"),
-  powerup: new Audio("audio/powerup.ogg"),
-  explosion: new Audio("audio/explosion.wav"),
-  gameover: new Audio("audio/gameover.wav"),
-};
-
-audio.ambience.loop = true;
-audio.ambience.volume = 0.25;
-audio.click.volume = 0.5;
-audio.error.volume = 0.45;
-audio.powerup.volume = 0.55;
-audio.explosion.volume = 0.6;
-audio.gameover.volume = 0.5;
-
-function playSfx(source) {
-  if (gameState.isMuted) return;
-  try {
-    const clip = source.cloneNode();
-    clip.volume = source.volume;
-    clip.play().catch(() => {});
-  } catch (e) {}
-}
-
-const sounds = {
-  type: () => playSfx(audio.click),
-  error: () => playSfx(audio.error),
-  explode: () => playSfx(audio.explosion),
-  powerup: () => playSfx(audio.powerup),
-  gameOver: () => playSfx(audio.gameover),
-};
-
-const atmosphereSystem = {
-  isPlaying: false,
-
-  start() {
-    if (this.isPlaying || gameState.isMuted) return;
-    this.isPlaying = true;
-    audio.ambience.currentTime = 0;
-    audio.ambience.play().catch(() => {});
-  },
-
-  stop() {
-    if (!this.isPlaying) return;
-    this.isPlaying = false;
-    audio.ambience.pause();
-  },
-
-  toggle() {
-    gameState.isMuted = !gameState.isMuted;
-    const btn = document.getElementById("mute-btn");
-    if (btn) {
-      btn.textContent = gameState.isMuted ? "🔇" : "🔊";
-      btn.classList.toggle("muted");
-    }
-
-    if (gameState.isMuted) {
-      this.stop();
-    } else if (gameState.isPlaying && !gameState.isPaused) {
-      this.start();
-    }
-  },
-};
-
-// ==================== GAME STATE ====================
-const gameState = {
-  score: 0,
-  lives: 3,
-  level: 1,
-  highScore: localStorage.getItem("highScore") || 0,
-  isPlaying: false,
-  isPaused: false,
-  isMuted: false,
-  animationId: null,
-  currentInput: "",
-  activeWord: null,
-  isFrozen: false,
-  freezeTimer: null,
-  levelUpTimer: null,
-  mistakes: 0,
-  bossMode: false,
-  bossModeEndsAt: 0,
-  lastBossLevel: 0,
-  modalPauseActive: false,
-  modalPauseTimer: null,
-};
-
-const config = {
-  canvas: { width: 800, height: 600 },
-  word: {
-    minSpeed: 0.5,
-    maxSpeed: 3.5,
-    spawnRate: 2000,
-    fontSize: 24,
-  },
-  difficulty: {
-    minSpawn: 650,
-    spawnDecay: 140,
-    speedRamp: 0.18,
-    wrongKeyPenalty: 5,
-    mistakeLifeThreshold: 5,
-    bossDurationMs: 14000,
-    bossSpawn: 450,
-    bossSpeedBoost: 0.6,
-  },
-};
-
-const wordBank = [
-  "code", "type", "game", "play", "word", "fast", "jump", "run", "star",
-  "moon", "fire", "wind", "rain", "snow", "tree", "rock", "keyboard",
-  "typing", "letter", "winner", "player", "attack", "defend", "rocket",
-  "planet", "galaxy", "comet", "meteor", "cosmic", "stellar", "javascript",
-  "programming", "developer", "computer", "challenge", "adventure",
-  "universe", "asteroid", "nebula", "supernova", "quantum",
-];
+import { gameState, config, wordBank } from "./state.js";
+import { sounds, atmosphereSystem } from "./audio.js";
+import {
+  showScreen,
+  updateHUD,
+  updateTypingDisplay,
+  flashTypingDisplay,
+  showLevelUpModal,
+  hideLevelUpModal,
+} from "./ui.js";
 
 let canvas, ctx;
 let words = [];
 let particles = [];
 let lastWordSpawn = 0;
 
-// ==================== SCREEN MANAGEMENT ====================
-function showScreen(screenId) {
-  document.querySelectorAll(".screen").forEach((screen) => {
-    screen.classList.remove("active");
-  });
-  document.getElementById(screenId).classList.add("active");
-}
-
-function init() {
+export function init() {
   canvas = document.getElementById("game-canvas");
   ctx = canvas.getContext("2d");
   canvas.width = config.canvas.width;
@@ -146,7 +30,6 @@ function setupEventListeners() {
     startGame();
   });
 
-  // Pause Button
   const pauseBtn = document.getElementById("pause-btn");
   if (pauseBtn) {
     pauseBtn.addEventListener("click", () => {
@@ -155,22 +38,19 @@ function setupEventListeners() {
     });
   }
 
-  // Resume Button
   const resumeBtn = document.getElementById("resume-btn");
   if (resumeBtn) resumeBtn.addEventListener("click", togglePause);
 
-  // Quit Button
   const quitBtn = document.getElementById("quit-btn");
   if (quitBtn) {
     quitBtn.addEventListener("click", () => {
-      togglePause(); // Unpause to clean up state
+      togglePause();
       showScreen("start-screen");
       atmosphereSystem.stop();
       resetGame();
     });
   }
 
-  // Mute Button
   const muteBtn = document.getElementById("mute-btn");
   if (muteBtn) muteBtn.addEventListener("click", () => atmosphereSystem.toggle());
 
@@ -191,7 +71,6 @@ function setupEventListeners() {
     levelUpModal.addEventListener("click", hideLevelUpModal);
   }
 
-  // Handle Escape key
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && gameState.isPlaying) {
       togglePause();
@@ -200,21 +79,18 @@ function setupEventListeners() {
   });
 }
 
-// ==================== GAME LOGIC ====================
 function togglePause() {
   if (!gameState.isPlaying) return;
 
   gameState.isPaused = !gameState.isPaused;
 
   if (gameState.isPaused) {
-    // Pausing
     cancelAnimationFrame(gameState.animationId);
     atmosphereSystem.stop();
     document.getElementById("pause-screen").classList.add("active");
   } else {
-    // Resuming
     document.getElementById("pause-screen").classList.remove("active");
-    lastWordSpawn = performance.now(); // Reset spawn timer
+    lastWordSpawn = performance.now();
     gameLoop();
     canvas.focus();
     if (!gameState.isMuted) atmosphereSystem.start();
@@ -222,7 +98,7 @@ function togglePause() {
 }
 
 function handleTyping(e) {
-  if (!gameState.isPlaying || gameState.isPaused) return; 
+  if (!gameState.isPlaying || gameState.isPaused) return;
   if (e.key.length > 1 && e.key !== "Backspace") return;
   e.preventDefault();
 
@@ -284,69 +160,16 @@ function checkWordMatch() {
   }
 }
 
-function updateTypingDisplay() {
-  const display = document.getElementById("typed-text");
-  display.textContent = gameState.currentInput.toUpperCase();
-
-  if (gameState.activeWord) {
-    display.style.color = "#10b981";
-  } else if (gameState.currentInput.length > 0) {
-    display.style.color = "#ef4444";
-  } else {
-    display.style.color = "#06b6d4";
-  }
-}
-
-function flashTypingDisplay(type) {
-  const container = document.querySelector(".typing-input-display");
-  if (type === "error") {
-    container.style.borderColor = "#ef4444";
-    setTimeout(() => {
-      container.style.borderColor = "";
-    }, 200);
-  }
-}
-
-function showLevelUpModal(level, options = {}) {
-  const modal = document.getElementById("levelup-modal");
-  const number = document.getElementById("levelup-number");
-  const badge = document.querySelector(".levelup-badge");
-  const subtitle = document.querySelector(".levelup-subtitle");
-  if (!modal || !number) return;
-
-  number.textContent = level;
-  if (badge) badge.textContent = options.badgeText || "LEVEL UP";
-  if (subtitle) {
-    subtitle.textContent =
-      options.subtitle || "Incoming wave faster and tougher";
-  }
-  modal.classList.add("active");
-  modal.setAttribute("aria-hidden", "false");
-
-  if (gameState.levelUpTimer) clearTimeout(gameState.levelUpTimer);
-  if (gameState.modalPauseTimer) clearTimeout(gameState.modalPauseTimer);
-
-  gameState.modalPauseActive = true;
-  gameState.modalPauseTimer = setTimeout(() => {
-    gameState.modalPauseActive = false;
-  }, 900);
-
-  gameState.levelUpTimer = setTimeout(() => {
-    hideLevelUpModal();
-  }, 1200);
-}
-
-function hideLevelUpModal() {
-  const modal = document.getElementById("levelup-modal");
-  if (!modal) return;
-  modal.classList.remove("active");
-  modal.setAttribute("aria-hidden", "true");
-}
-
 function applyPenalty() {
   gameState.mistakes += 1;
   gameState.score = Math.max(0, gameState.score - config.difficulty.wrongKeyPenalty);
   updateHUD();
+
+  const now = performance.now();
+  if (now - gameState.lastFailSoundAt > 120) {
+    sounds.fail();
+    gameState.lastFailSoundAt = now;
+  }
 
   if (gameState.mistakes % config.difficulty.mistakeLifeThreshold === 0) {
     loseLife();
@@ -384,6 +207,7 @@ function resetGame() {
   gameState.bossModeEndsAt = 0;
   gameState.lastBossLevel = 0;
   gameState.modalPauseActive = false;
+  gameState.lastFailSoundAt = 0;
   document.getElementById("game-canvas").style.borderColor = "";
   document.getElementById("game-canvas").style.boxShadow = "";
   document.getElementById("pause-screen").classList.remove("active");
@@ -442,7 +266,6 @@ function updateWords(timestamp) {
 }
 
 function spawnWord() {
-  let availableWords;
   let minLen = 3;
   if (gameState.level >= 5) minLen = 4;
   if (gameState.level >= 8) minLen = 5;
@@ -454,7 +277,7 @@ function spawnWord() {
     minLen = Math.max(minLen, 7);
   }
 
-  availableWords = wordBank.filter((w) => w.length >= minLen);
+  let availableWords = wordBank.filter((w) => w.length >= minLen);
   if (availableWords.length === 0) availableWords = wordBank;
 
   const text =
@@ -636,15 +459,9 @@ function loseLife() {
   if (gameState.lives <= 0) {
     gameOver();
   } else {
+    sounds.fail();
     createParticles(canvas.width / 2, canvas.height - 50, "#ef4444", 18);
   }
-}
-
-function updateHUD() {
-  document.getElementById("score").textContent = gameState.score;
-  document.getElementById("level").textContent = gameState.level;
-  document.getElementById("lives").textContent =
-    "❤️".repeat(gameState.lives) || "💀";
 }
 
 function gameOver() {
@@ -665,5 +482,3 @@ function gameOver() {
   document.getElementById("final-level").textContent = gameState.level;
   showScreen("gameover-screen");
 }
-
-window.addEventListener("load", init);

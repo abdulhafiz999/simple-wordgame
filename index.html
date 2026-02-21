@@ -22,9 +22,6 @@
     <div class="stars3"></div>
     <div class="nebula"></div>
 
-    <!-- Background music (optional: add a file named "music.mp3" or "music.ogg" to use your own track) -->
-    <audio id="bg-music" loop preload="auto"></audio>
-
     <div id="game-container">
       <!-- Start Screen -->
       <div id="start-screen" class="screen active">
@@ -147,6 +144,17 @@
         </div>
       </div>
 
+      <!-- LEVEL UP MODAL -->
+      <div id="levelup-modal" class="levelup-modal" aria-hidden="true">
+        <div class="levelup-card">
+          <div class="levelup-badge">LEVEL UP</div>
+          <div class="levelup-title">
+            Level <span id="levelup-number">2</span>
+          </div>
+          <div class="levelup-subtitle">Incoming wave faster and tougher</div>
+        </div>
+      </div>
+
       <!-- Game Over Screen -->
       <div id="gameover-screen" class="screen">
         <div class="gameover-content">
@@ -182,6 +190,19 @@
       </div>
     </div>
 
-    <script src="game.js"></script>
+    <!-- AUDIO GATE -->
+    <div id="audio-gate" class="audio-gate" aria-hidden="false">
+      <div class="audio-gate-card">
+        <div class="audio-gate-title">Enable Sound</div>
+        <div class="audio-gate-subtitle">
+          Tap to unlock cosmic ambience and effects
+        </div>
+        <button id="audio-start-btn" class="menu-btn primary">
+          <span>START AUDIO</span>
+        </button>
+      </div>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
   </body>
 </html>
