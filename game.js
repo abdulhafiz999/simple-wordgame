@@ -1,70 +1,171 @@
+// ==================== CINEMATIC AUDIO SYSTEM ====================
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-const sounds = {
-  type: () => playTone(800, "square", 0.05, 0.05),
-  error: () => playTone(150, "sawtooth", 0.2, 0.1),
-  explode: () => playTone(100, "sawtooth", 0.2, 0.2, true),
-  powerup: () => playTone(1200, "sine", 0.3, 0.1),
-  gameOver: () => {
-    playTone(300, "sawtooth", 0.5, 0.2);
-    setTimeout(() => playTone(250, "sawtooth", 0.5, 0.2), 400);
-    setTimeout(() => playTone(200, "sawtooth", 1.0, 0.2), 800);
-  },
-};
-
-function playTone(freq, type, duration, vol = 0.1, slide = false) {
-  if (gameState.isMuted) return;
-  if (audioCtx.state === "suspended") audioCtx.resume();
-
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-
-  osc.type = type;
-  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-  if (slide) {
-    osc.frequency.exponentialRampToValueAtTime(
-      10,
-      audioCtx.currentTime + duration
-    );
-  }
-
-  gain.gain.setValueAtTime(0, audioCtx.currentTime);
-  gain.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + 0.01);
-  gain.gain.exponentialRampToValueAtTime(
-    0.001,
-    audioCtx.currentTime + duration
-  );
-
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-  osc.start();
-  osc.stop(audioCtx.currentTime + duration);
+// 1. Create a "Noise Buffer" for realistic explosions (Static)
+const bufferSize = audioCtx.sampleRate * 2; // 2 seconds of noise
+const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+const data = noiseBuffer.getChannelData(0);
+for (let i = 0; i < bufferSize; i++) {
+  data[i] = Math.random() * 2 - 1;
 }
 
-const musicSystem = {
+const sounds = {
+  // High-tech holographic click
+  type: () => {
+    if (gameState.isMuted) return;
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    
+    osc.type = "sine";
+    // Start high, drop slightly (tech chirp)
+    osc.frequency.setValueAtTime(1200, audioCtx.currentTime); 
+    osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.05);
+    
+    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+    
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.05);
+  },
+
+  // Soft digital error thud
+  error: () => {
+    if (gameState.isMuted) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.2);
+    
+    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+    
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.2);
+  },
+
+  // Realistic Explosion (White Noise + Lowpass Filter)
+  explode: () => {
+    if (gameState.isMuted) return;
+    const noise = audioCtx.createBufferSource();
+    const noiseGain = audioCtx.createGain();
+    const filter = audioCtx.createBiquadFilter();
+
+    noise.buffer = noiseBuffer;
+    filter.type = "lowpass";
+    filter.frequency.value = 1000; // Muffle the harsh static
+
+    noiseGain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(audioCtx.destination);
+    noise.start();
+  },
+
+  // Ethereal Powerup Shimmer
+  powerup: () => {
+    if (gameState.isMuted) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+    osc.frequency.linearRampToValueAtTime(1200, audioCtx.currentTime + 0.3);
+    
+    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.3);
+    
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.3);
+  },
+
+  // Deep Game Over Drone
+  gameOver: () => {
+    if (gameState.isMuted) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + 1.5);
+    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+    gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 1.5);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 1.5);
+  }
+};
+
+// ==================== ATMOSPHERE GENERATOR (The "Professional" Sound) ====================
+const atmosphereSystem = {
+  nodes: [],
   isPlaying: false,
-  noteIndex: 0,
-  nextNoteTime: 0,
-  timerID: null,
-  tempo: 120,
-  melody: [
-    220, null, 261, null, 329, null, 261, null,
-    196, null, 246, null, 329, null, 246, null,
-    174, null, 220, null, 261, null, 220, null,
-    164, null, 207, null, 246, null, 207, null,
-  ],
 
   start() {
-    if (this.isPlaying) return;
+    if (this.isPlaying || gameState.isMuted) return;
+    if (audioCtx.state === "suspended") audioCtx.resume();
     this.isPlaying = true;
-    this.noteIndex = 0;
-    this.nextNoteTime = audioCtx.currentTime;
-    this.scheduler();
+
+    const now = audioCtx.currentTime;
+    const masterGain = audioCtx.createGain();
+    masterGain.gain.setValueAtTime(0, now);
+    masterGain.gain.linearRampToValueAtTime(0.15, now + 4); // Slow fade in
+
+    // Frequencies for a dark space chord (A2 + E3 + A3)
+    const freqs = [55, 82.4, 110]; 
+
+    freqs.forEach((f, i) => {
+      const osc = audioCtx.createOscillator();
+      const oscGain = audioCtx.createGain();
+      
+      osc.type = "triangle"; 
+      osc.frequency.value = f;
+      // Slight detune makes it sound "wide" and "spacey"
+      osc.detune.value = Math.random() * 10 - 5; 
+
+      // LFO makes the sound "breathe" instead of just buzzing
+      const lfo = audioCtx.createOscillator();
+      lfo.type = "sine";
+      lfo.frequency.value = 0.1 + (i * 0.05);
+      const lfoGain = audioCtx.createGain();
+      lfoGain.gain.value = 0.05; 
+
+      lfo.connect(lfoGain);
+      lfoGain.connect(oscGain.gain);
+      
+      osc.connect(oscGain);
+      oscGain.connect(masterGain);
+      
+      osc.start(now);
+      lfo.start(now);
+      
+      this.nodes.push(osc, oscGain, lfo, lfoGain);
+    });
+
+    masterGain.connect(audioCtx.destination);
+    this.nodes.push(masterGain);
   },
 
   stop() {
+    if (!this.isPlaying) return;
     this.isPlaying = false;
-    window.clearTimeout(this.timerID);
+    
+    this.nodes.forEach(node => {
+      try { node.stop(); } catch(e){}
+      try { node.disconnect(); } catch(e){}
+    });
+    this.nodes = [];
   },
 
   toggle() {
@@ -80,55 +181,17 @@ const musicSystem = {
     } else if (gameState.isPlaying && !gameState.isPaused) {
       this.start();
     }
-  },
-
-  playNote(freq, time) {
-    if (gameState.isMuted) return;
-
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-
-    osc.type = "sine";
-    osc.frequency.value = freq;
-
-    gain.gain.setValueAtTime(0, time);
-    gain.gain.linearRampToValueAtTime(0.05, time + 0.05);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.5);
-
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-
-    osc.start(time);
-    osc.stop(time + 0.5);
-  },
-
-  scheduler() {
-    while (this.nextNoteTime < audioCtx.currentTime + 0.1) {
-      if (this.melody[this.noteIndex]) {
-        this.playNote(this.melody[this.noteIndex], this.nextNoteTime);
-      }
-      const secondsPerBeat = 60.0 / this.tempo;
-      this.nextNoteTime += 0.25 * secondsPerBeat;
-
-      this.noteIndex++;
-      if (this.noteIndex === this.melody.length) {
-        this.noteIndex = 0;
-      }
-    }
-
-    if (this.isPlaying) {
-      this.timerID = window.setTimeout(() => this.scheduler(), 25);
-    }
-  },
+  }
 };
 
+// ==================== GAME STATE ====================
 const gameState = {
   score: 0,
   lives: 3,
   level: 1,
   highScore: localStorage.getItem("highScore") || 0,
   isPlaying: false,
-  isPaused: false, // NEW: Track pause state
+  isPaused: false,
   isMuted: false,
   animationId: null,
   currentInput: "",
@@ -161,6 +224,7 @@ let words = [];
 let particles = [];
 let lastWordSpawn = 0;
 
+// ==================== SCREEN MANAGEMENT ====================
 function showScreen(screenId) {
   document.querySelectorAll(".screen").forEach((screen) => {
     screen.classList.remove("active");
@@ -204,14 +268,14 @@ function setupEventListeners() {
     quitBtn.addEventListener("click", () => {
       togglePause(); // Unpause to clean up state
       showScreen("start-screen");
-      musicSystem.stop();
+      atmosphereSystem.stop();
       resetGame();
     });
   }
 
   // Mute Button
   const muteBtn = document.getElementById("mute-btn");
-  if (muteBtn) muteBtn.addEventListener("click", () => musicSystem.toggle());
+  if (muteBtn) muteBtn.addEventListener("click", () => atmosphereSystem.toggle());
 
   document
     .getElementById("instructions-btn")
@@ -234,6 +298,7 @@ function setupEventListeners() {
   });
 }
 
+// ==================== GAME LOGIC ====================
 function togglePause() {
   if (!gameState.isPlaying) return;
 
@@ -242,20 +307,20 @@ function togglePause() {
   if (gameState.isPaused) {
     // Pausing
     cancelAnimationFrame(gameState.animationId);
-    audioCtx.suspend();
+    audioCtx.suspend(); // Instantly pauses the atmosphere
     document.getElementById("pause-screen").classList.add("active");
   } else {
     // Resuming
     audioCtx.resume();
     document.getElementById("pause-screen").classList.remove("active");
-    lastWordSpawn = performance.now(); // Reset spawn timer to prevent jump
+    lastWordSpawn = performance.now(); // Reset spawn timer
     gameLoop();
     canvas.focus();
   }
 }
 
 function handleTyping(e) {
-  if (!gameState.isPlaying || gameState.isPaused) return; // Prevent typing while paused
+  if (!gameState.isPlaying || gameState.isPaused) return; 
   if (e.key.length > 1 && e.key !== "Backspace") return;
   e.preventDefault();
 
@@ -347,7 +412,7 @@ function startGame() {
   canvas.focus();
 
   if (!gameState.isMuted) {
-    musicSystem.start();
+    atmosphereSystem.start();
   }
 
   gameLoop();
@@ -371,15 +436,14 @@ function resetGame() {
   particles = [];
   lastWordSpawn = 0;
 
-  musicSystem.stop();
-  musicSystem.tempo = 120;
+  atmosphereSystem.stop();
 
   updateTypingDisplay();
   if (gameState.animationId) cancelAnimationFrame(gameState.animationId);
 }
 
 function gameLoop(timestamp = 0) {
-  if (!gameState.isPlaying || gameState.isPaused) return; // Stop if paused
+  if (!gameState.isPlaying || gameState.isPaused) return;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   updateWords(timestamp);
@@ -576,8 +640,6 @@ function addScore(points) {
     gameState.level = newLevel;
     updateHUD();
     createParticles(canvas.width / 2, canvas.height / 2, "#a855f7", 50);
-
-    musicSystem.tempo += 5;
   }
 }
 
@@ -601,7 +663,7 @@ function updateHUD() {
 function gameOver() {
   gameState.isPlaying = false;
 
-  musicSystem.stop();
+  atmosphereSystem.stop();
   sounds.gameOver();
 
   if (gameState.score > gameState.highScore) {
@@ -612,7 +674,6 @@ function gameOver() {
     document.getElementById("new-record-container").style.display = "none";
   }
 
-  // Display final stats
   document.getElementById("final-score").textContent = gameState.score;
   document.getElementById("final-level").textContent = gameState.level;
   showScreen("gameover-screen");
