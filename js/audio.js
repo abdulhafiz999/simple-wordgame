@@ -1,137 +1,294 @@
 import { gameState } from "./state.js";
 
 // ============================================================
-//  AUDIO SYSTEM — Type Attack
-//  Local audio files + Web Audio API for ambience
+//  AUDIO SYSTEM — Synthetic Space Ambience
 // ============================================================
 
-const SFX_URLS = {
-  click:     "../audio/click.wav",
-  error:     "../audio/error_beep.wav",
-  fail:      "../audio/fail.wav",
-  explosion: "../audio/explosion.wav",
-  powerup:   "../audio/powerup.mp3",
-  gameover:  "../audio/gameover.wav",
-};
+let audioCtx     = null;
+let masterGain   = null;
+let ambienceGain = null;
+let ambienceNodes = [];
+let fadeTimer    = null;
 
-const AMBIENCE_URLS = [
-  "../audio/space_ambience.mp3",
-  "../audio/dark_ambience.mp3",
-  "../audio/space_ambience.ogg",
-  "../audio/dark_ambience.ogg",
-];
-
-// ============================================================
-//  SFX — HTMLAudioElement with clone-for-polyphony
-// ============================================================
-const sfxElements = {};
-
-function loadSfx(key, url, volume) {
-  const el = new Audio(url);
-  el.volume = volume;
-  el.preload = "auto";
-  sfxElements[key] = el;
+function getCtx() {
+  if (!audioCtx) return null;
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
 }
 
-loadSfx("click",     SFX_URLS.click,     0.40);
-loadSfx("error",     SFX_URLS.error,     0.40);
-loadSfx("fail",      SFX_URLS.fail,      0.45);
-loadSfx("explosion", SFX_URLS.explosion, 0.55);
-loadSfx("powerup",   SFX_URLS.powerup,   0.50);
-loadSfx("gameover",  SFX_URLS.gameover,  0.50);
+// ============================================================
+//  REVERB — convolution reverb via noise impulse
+// ============================================================
+function createReverb(duration = 4, decay = 3) {
+  const ctx        = audioCtx;
+  const length     = ctx.sampleRate * duration;
+  const impulse    = ctx.createBuffer(2, length, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const data = impulse.getChannelData(c);
+    for (let i = 0; i < length; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
+    }
+  }
+  const convolver  = ctx.createConvolver();
+  convolver.buffer = impulse;
+  return convolver;
+}
 
-function playSfx(key) {
-  if (gameState.isMuted) return;
-  const el = sfxElements[key];
-  if (!el) return;
-  try {
-    const clone = el.cloneNode();
-    clone.volume = el.volume;
-    clone.play().catch(() => {});
-  } catch (_) {}
+// ============================================================
+//  SPACE AMBIENCE — deep cinematic drone
+//  Sub bass rumble + slow filter swept pad + high shimmer
+//  + occasional noise wisps for that "void of space" feeling
+// ============================================================
+function buildSpaceAmbience() {
+  const ctx     = audioCtx;
+  const reverb  = createReverb(6, 2.5);
+  const reverbG = ctx.createGain();
+  reverbG.gain.setValueAtTime(0.55, ctx.currentTime);
+  reverb.connect(reverbG);
+  reverbG.connect(ambienceGain);
+
+  const dryBus = ctx.createGain();
+  dryBus.gain.setValueAtTime(0.45, ctx.currentTime);
+  dryBus.connect(ambienceGain);
+
+  // --- Layer 1: Sub bass rumble (very low, barely audible, felt more than heard)
+  function addOsc(freq, type, gainVal, detuneVal, target) {
+    const osc = ctx.createOscillator();
+    const g   = ctx.createGain();
+    osc.type  = type;
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    osc.detune.setValueAtTime(detuneVal, ctx.currentTime);
+    g.gain.setValueAtTime(gainVal, ctx.currentTime);
+    osc.connect(g);
+    g.connect(target);
+
+    // Slow amplitude LFO — breathing effect
+    const lfo  = ctx.createOscillator();
+    const lfoG = ctx.createGain();
+    lfo.frequency.setValueAtTime(0.04 + Math.random() * 0.04, ctx.currentTime);
+    lfoG.gain.setValueAtTime(gainVal * 0.35, ctx.currentTime);
+    lfo.connect(lfoG);
+    lfoG.connect(g.gain);
+    lfo.start();
+    osc.start();
+    return { osc, lfo };
+  }
+
+  const nodes = [];
+
+  // Sub bass — the "weight" of space
+  nodes.push(addOsc(36,  "sine",     0.5,   0,    dryBus));
+  nodes.push(addOsc(36,  "sine",     0.3,   7,    dryBus));  // slight detune for width
+
+  // Mid drone — filtered pad sent mostly to reverb
+  nodes.push(addOsc(72,  "sine",     0.22,  0,    reverb));
+  nodes.push(addOsc(72,  "sine",     0.15, -5,    reverb));
+  nodes.push(addOsc(108, "sine",     0.10,  3,    reverb));  // 3rd harmonic
+  nodes.push(addOsc(54,  "triangle", 0.12,  0,    reverb));  // sub octave pad
+
+  // High shimmer — very quiet, just air
+  nodes.push(addOsc(432, "sine",     0.03,  0,    reverb));
+  nodes.push(addOsc(648, "sine",     0.015, 0,    reverb));
+
+  // --- Slow filter sweep on mid layer for movement
+  const swept = ctx.createOscillator();
+  const sweptG = ctx.createGain();
+  const sweptF = ctx.createBiquadFilter();
+  swept.type = "sawtooth";
+  swept.frequency.setValueAtTime(36, ctx.currentTime);
+  sweptF.type = "lowpass";
+  sweptF.Q.setValueAtTime(4, ctx.currentTime);
+  sweptF.frequency.setValueAtTime(80, ctx.currentTime);
+  sweptG.gain.setValueAtTime(0.08, ctx.currentTime);
+
+  // LFO modulates filter cutoff slowly
+  const filterLfo  = ctx.createOscillator();
+  const filterLfoG = ctx.createGain();
+  filterLfo.frequency.setValueAtTime(0.03, ctx.currentTime);
+  filterLfoG.gain.setValueAtTime(120, ctx.currentTime);
+  filterLfo.connect(filterLfoG);
+  filterLfoG.connect(sweptF.frequency);
+  filterLfo.start();
+
+  swept.connect(sweptF);
+  sweptF.connect(sweptG);
+  sweptG.connect(reverb);
+  swept.start();
+  nodes.push({ osc: swept, lfo: filterLfo });
+
+  // --- Noise wisps — occasional cosmic static
+  function spawnWisp() {
+    if (!audioCtx || !ambienceGain || !gameState.isPlaying) return;
+    const bufLen = ctx.sampleRate * (1.5 + Math.random() * 2);
+    const buf    = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+    const data   = buf.getChannelData(0);
+    for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
+
+    const src    = ctx.createBufferSource();
+    const filt   = ctx.createBiquadFilter();
+    const wispG  = ctx.createGain();
+    filt.type    = "bandpass";
+    filt.frequency.setValueAtTime(200 + Math.random() * 800, ctx.currentTime);
+    filt.Q.setValueAtTime(8, ctx.currentTime);
+    wispG.gain.setValueAtTime(0, ctx.currentTime);
+    wispG.gain.linearRampToValueAtTime(0.04, ctx.currentTime + 0.8);
+    wispG.gain.linearRampToValueAtTime(0, ctx.currentTime + bufLen / ctx.sampleRate);
+
+    src.buffer = buf;
+    src.connect(filt);
+    filt.connect(wispG);
+    wispG.connect(reverb);
+    src.start();
+
+    // Schedule next wisp
+    const next = 4000 + Math.random() * 8000;
+    setTimeout(spawnWisp, next);
+  }
+
+  // First wisp after 3s
+  setTimeout(spawnWisp, 3000);
+
+  return nodes;
+}
+
+// ============================================================
+//  SFX
+// ============================================================
+function playClick() {
+  const ctx = getCtx(); if (!ctx || gameState.isMuted) return;
+  const osc = ctx.createOscillator();
+  const g   = ctx.createGain();
+  osc.connect(g); g.connect(masterGain);
+  osc.frequency.setValueAtTime(1100, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(700, ctx.currentTime + 0.05);
+  g.gain.setValueAtTime(0.18, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.07);
+  osc.start(); osc.stop(ctx.currentTime + 0.07);
+}
+
+function playError() {
+  const ctx = getCtx(); if (!ctx || gameState.isMuted) return;
+  [200, 175].forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const g   = ctx.createGain();
+    osc.type  = "sawtooth";
+    osc.connect(g); g.connect(masterGain);
+    const t = ctx.currentTime + i * 0.06;
+    osc.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0.15, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+    osc.start(t); osc.stop(t + 0.09);
+  });
+}
+
+function playFail() {
+  const ctx = getCtx(); if (!ctx || gameState.isMuted) return;
+  const osc = ctx.createOscillator();
+  const g   = ctx.createGain();
+  osc.type  = "sawtooth";
+  osc.connect(g); g.connect(masterGain);
+  osc.frequency.setValueAtTime(280, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.35);
+  g.gain.setValueAtTime(0.25, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+  osc.start(); osc.stop(ctx.currentTime + 0.35);
+}
+
+function playExplosion() {
+  const ctx = getCtx(); if (!ctx || gameState.isMuted) return;
+  const buf  = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  const src  = ctx.createBufferSource();
+  const filt = ctx.createBiquadFilter();
+  const g    = ctx.createGain();
+  filt.type  = "lowpass";
+  filt.frequency.setValueAtTime(1000, ctx.currentTime);
+  filt.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.5);
+  src.buffer = buf;
+  src.connect(filt); filt.connect(g); g.connect(masterGain);
+  g.gain.setValueAtTime(0.7, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+  src.start(); src.stop(ctx.currentTime + 0.5);
+
+  const osc = ctx.createOscillator();
+  const og  = ctx.createGain();
+  osc.connect(og); og.connect(masterGain);
+  osc.frequency.setValueAtTime(100, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(25, ctx.currentTime + 0.3);
+  og.gain.setValueAtTime(0.5, ctx.currentTime);
+  og.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+  osc.start(); osc.stop(ctx.currentTime + 0.3);
+}
+
+function playPowerup() {
+  const ctx = getCtx(); if (!ctx || gameState.isMuted) return;
+  [300, 450, 600, 900, 1200].forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const g   = ctx.createGain();
+    osc.type  = "sine";
+    osc.connect(g); g.connect(masterGain);
+    const t = ctx.currentTime + i * 0.065;
+    osc.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0.18, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+    osc.start(t); osc.stop(t + 0.15);
+  });
+}
+
+function playGameOver() {
+  const ctx = getCtx(); if (!ctx || gameState.isMuted) return;
+  [523, 415, 349, 262].forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const g   = ctx.createGain();
+    osc.type  = "sine";
+    osc.connect(g); g.connect(masterGain);
+    const t = ctx.currentTime + i * 0.28;
+    osc.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0.28, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    osc.start(t); osc.stop(t + 0.5);
+  });
 }
 
 export const sounds = {
-  type:     () => playSfx("click"),
-  error:    () => playSfx("error"),
-  fail:     () => playSfx("fail"),
-  explode:  () => playSfx("explosion"),
-  powerup:  () => playSfx("powerup"),
-  gameOver: () => playSfx("gameover"),
+  type:     playClick,
+  error:    playError,
+  fail:     playFail,
+  explode:  playExplosion,
+  powerup:  playPowerup,
+  gameOver: playGameOver,
 };
 
 // ============================================================
-//  AMBIENCE — Web Audio API (reliable looping + fade)
+//  ATMOSPHERE SYSTEM
 // ============================================================
-let audioCtx       = null;
-let ambienceSource = null;
-let ambienceGain   = null;
-let ambienceBuffer = null;
-let ambienceLoaded = false;
-let fadeTimer      = null;
-
-async function tryLoadAmbience() {
-  for (const url of AMBIENCE_URLS) {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) continue;
-      const raw = await res.arrayBuffer();
-      ambienceBuffer = await audioCtx.decodeAudioData(raw);
-      ambienceLoaded = true;
-      console.log("[Audio] Ambience loaded:", url);
-      return;
-    } catch (e) {
-      console.warn("[Audio] Skipping:", url, e.message);
-    }
-  }
-  console.warn("[Audio] No ambience file could be loaded. Add space_ambience.mp3 to audio/");
-}
-
 export const atmosphereSystem = {
   isPlaying: false,
 
   async init() {
     if (audioCtx) return;
-    try {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      ambienceGain = audioCtx.createGain();
-      ambienceGain.gain.setValueAtTime(0, audioCtx.currentTime);
-      ambienceGain.connect(audioCtx.destination);
-      await tryLoadAmbience();
-    } catch (e) {
-      console.warn("[Audio] AudioContext init failed:", e);
-    }
+    audioCtx     = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain   = audioCtx.createGain();
+    masterGain.gain.setValueAtTime(0.8, audioCtx.currentTime);
+    masterGain.connect(audioCtx.destination);
+
+    ambienceGain = audioCtx.createGain();
+    ambienceGain.gain.setValueAtTime(0, audioCtx.currentTime);
+    ambienceGain.connect(masterGain);
   },
 
   start() {
-    if (this.isPlaying || gameState.isMuted || !ambienceLoaded || !audioCtx) return;
-    if (audioCtx.state === "suspended") {
-      audioCtx.resume().then(() => this._play());
-    } else {
-      this._play();
-    }
-  },
+    if (this.isPlaying || gameState.isMuted || !audioCtx) return;
+    if (audioCtx.state === "suspended") audioCtx.resume();
 
-  _play() {
-    if (this.isPlaying) return;
-    try {
-      if (ambienceSource) {
-        try { ambienceSource.stop(); } catch (_) {}
-      }
-      ambienceSource = audioCtx.createBufferSource();
-      ambienceSource.buffer = ambienceBuffer;
-      ambienceSource.loop = true;
-      ambienceSource.connect(ambienceGain);
-      ambienceSource.start(0);
-      this.isPlaying = true;
+    ambienceNodes = buildSpaceAmbience();
+    this.isPlaying = true;
 
-      // Fade in over 2.5s
-      ambienceGain.gain.cancelScheduledValues(audioCtx.currentTime);
-      ambienceGain.gain.setValueAtTime(0, audioCtx.currentTime);
-      ambienceGain.gain.linearRampToValueAtTime(0.35, audioCtx.currentTime + 2.5);
-    } catch (e) {
-      console.warn("[Audio] Playback error:", e);
-    }
+    // Slow fade in over 4s so it creeps in atmospherically
+    ambienceGain.gain.cancelScheduledValues(audioCtx.currentTime);
+    ambienceGain.gain.setValueAtTime(0, audioCtx.currentTime);
+    ambienceGain.gain.linearRampToValueAtTime(0.6, audioCtx.currentTime + 4);
   },
 
   stop() {
@@ -141,11 +298,15 @@ export const atmosphereSystem = {
 
     ambienceGain.gain.cancelScheduledValues(audioCtx.currentTime);
     ambienceGain.gain.setValueAtTime(ambienceGain.gain.value, audioCtx.currentTime);
-    ambienceGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 1.5);
+    ambienceGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 2);
 
     fadeTimer = setTimeout(() => {
-      try { ambienceSource?.stop(); ambienceSource = null; } catch (_) {}
-    }, 1600);
+      ambienceNodes.forEach(({ osc, lfo }) => {
+        try { osc.stop(); } catch (_) {}
+        try { lfo.stop(); } catch (_) {}
+      });
+      ambienceNodes = [];
+    }, 2100);
   },
 
   toggle() {
@@ -164,7 +325,7 @@ export const atmosphereSystem = {
 };
 
 // ============================================================
-//  AUDIO GATE — unlocks AudioContext via user gesture
+//  AUDIO GATE
 // ============================================================
 export function initAudioGate() {
   const gate = document.getElementById("audio-gate");
