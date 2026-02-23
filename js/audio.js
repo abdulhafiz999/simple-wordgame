@@ -2,25 +2,23 @@ import { gameState } from "./state.js";
 
 // ============================================================
 //  AUDIO SYSTEM — Type Attack
-//  All sounds loaded from reliable public CDNs.
-//  Ambience uses Web Audio API for seamless looping + fades.
-//  SFX uses HTMLAudioElement clone trick for polyphony.
+//  Local audio files + Web Audio API for ambience
 // ============================================================
 
-// --- Online SFX sources (royalty-free, public CDNs) ---
 const SFX_URLS = {
-  click:     "https://cdn.freesound.org/previews/242/242501_4284968-lq.mp3",
-  error:     "https://cdn.freesound.org/previews/142/142608_1840739-lq.mp3",
-  fail:      "https://cdn.freesound.org/previews/331/331912_3248244-lq.mp3",
-  explosion: "https://cdn.freesound.org/previews/235/235968_4523895-lq.mp3",
-  powerup:   "https://cdn.freesound.org/previews/341/341695_5858296-lq.mp3",
-  gameover:  "https://cdn.freesound.org/previews/270/270402_5123851-lq.mp3",
+  click:     "../audio/click.wav",
+  error:     "../audio/error_beep.wav",
+  fail:      "../audio/fail.wav",
+  explosion: "../audio/explosion.wav",
+  powerup:   "../audio/powerup.mp3",
+  gameover:  "../audio/gameover.wav",
 };
 
-// Ambience candidates — tried in order until one decodes successfully
 const AMBIENCE_URLS = [
-  "https://cdn.freesound.org/previews/521/521975_3408800-lq.mp3",
-  "https://cdn.freesound.org/previews/244/244940_4284968-lq.mp3",
+  "../audio/space_ambience.mp3",
+  "../audio/dark_ambience.mp3",
+  "../audio/space_ambience.ogg",
+  "../audio/dark_ambience.ogg",
 ];
 
 // ============================================================
@@ -65,12 +63,12 @@ export const sounds = {
 // ============================================================
 //  AMBIENCE — Web Audio API (reliable looping + fade)
 // ============================================================
-let audioCtx        = null;
-let ambienceSource  = null;
-let ambienceGain    = null;
-let ambienceBuffer  = null;
-let ambienceLoaded  = false;
-let fadeTimer       = null;
+let audioCtx       = null;
+let ambienceSource = null;
+let ambienceGain   = null;
+let ambienceBuffer = null;
+let ambienceLoaded = false;
+let fadeTimer      = null;
 
 async function tryLoadAmbience() {
   for (const url of AMBIENCE_URLS) {
@@ -83,10 +81,10 @@ async function tryLoadAmbience() {
       console.log("[Audio] Ambience loaded:", url);
       return;
     } catch (e) {
-      console.warn("[Audio] Failed:", url, e.message);
+      console.warn("[Audio] Skipping:", url, e.message);
     }
   }
-  console.warn("[Audio] All ambience sources failed.");
+  console.warn("[Audio] No ambience file could be loaded. Add space_ambience.mp3 to audio/");
 }
 
 export const atmosphereSystem = {
@@ -127,7 +125,7 @@ export const atmosphereSystem = {
       ambienceSource.start(0);
       this.isPlaying = true;
 
-      // Smooth fade in over 2.5s
+      // Fade in over 2.5s
       ambienceGain.gain.cancelScheduledValues(audioCtx.currentTime);
       ambienceGain.gain.setValueAtTime(0, audioCtx.currentTime);
       ambienceGain.gain.linearRampToValueAtTime(0.35, audioCtx.currentTime + 2.5);
