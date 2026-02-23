@@ -2,37 +2,50 @@ import { gameState } from "./state.js";
 
 // ============================================================
 //  AUDIO SYSTEM — Type Attack
-//  Fix: paths are relative to js/ folder → ../audio/
-//  Fix: ambience uses Web Audio API gain node for reliable
-//       volume control and fade-in to avoid autoplay blocks.
+//  All sounds loaded from reliable public CDNs.
+//  Ambience uses Web Audio API for seamless looping + fades.
+//  SFX uses HTMLAudioElement clone trick for polyphony.
 // ============================================================
 
-let audioCtx = null;
-let ambienceSource = null;
-let ambienceGain = null;
-let ambienceBuffer = null;
-let ambienceLoaded = false;
-let ambienceFadeTimer = null;
-
-// Simple one-shot SFX via HTMLAudioElement (clone trick for polyphony)
-const sfx = {
-  click:     createSfx("../audio/click.wav",      0.45),
-  error:     createSfx("../audio/error_beep.wav", 0.45),
-  fail:      createSfx("../audio/fail.wav",        0.50),
-  explosion: createSfx("../audio/explosion.wav",  0.60),
-  powerup:   createSfx("../audio/powerup.ogg",    0.55),
-  gameover:  createSfx("../audio/gameover.wav",   0.50),
+// --- Online SFX sources (royalty-free, public CDNs) ---
+const SFX_URLS = {
+  click:     "https://cdn.freesound.org/previews/242/242501_4284968-lq.mp3",
+  error:     "https://cdn.freesound.org/previews/142/142608_1840739-lq.mp3",
+  fail:      "https://cdn.freesound.org/previews/331/331912_3248244-lq.mp3",
+  explosion: "https://cdn.freesound.org/previews/235/235968_4523895-lq.mp3",
+  powerup:   "https://cdn.freesound.org/previews/341/341695_5858296-lq.mp3",
+  gameover:  "https://cdn.freesound.org/previews/270/270402_5123851-lq.mp3",
 };
 
-function createSfx(src, volume) {
-  const el = new Audio(src);
+// Ambience candidates — tried in order until one decodes successfully
+const AMBIENCE_URLS = [
+  "https://cdn.freesound.org/previews/521/521975_3408800-lq.mp3",
+  "https://cdn.freesound.org/previews/244/244940_4284968-lq.mp3",
+];
+
+// ============================================================
+//  SFX — HTMLAudioElement with clone-for-polyphony
+// ============================================================
+const sfxElements = {};
+
+function loadSfx(key, url, volume) {
+  const el = new Audio(url);
   el.volume = volume;
   el.preload = "auto";
-  return el;
+  sfxElements[key] = el;
 }
 
-function playSfx(el) {
+loadSfx("click",     SFX_URLS.click,     0.40);
+loadSfx("error",     SFX_URLS.error,     0.40);
+loadSfx("fail",      SFX_URLS.fail,      0.45);
+loadSfx("explosion", SFX_URLS.explosion, 0.55);
+loadSfx("powerup",   SFX_URLS.powerup,   0.50);
+loadSfx("gameover",  SFX_URLS.gameover,  0.50);
+
+function playSfx(key) {
   if (gameState.isMuted) return;
+  const el = sfxElements[key];
+  if (!el) return;
   try {
     const clone = el.cloneNode();
     clone.volume = el.volume;
@@ -40,83 +53,73 @@ function playSfx(el) {
   } catch (_) {}
 }
 
-// ============================================================
-//  PUBLIC SFX API
-// ============================================================
 export const sounds = {
-  type:     () => playSfx(sfx.click),
-  error:    () => playSfx(sfx.error),
-  fail:     () => playSfx(sfx.fail),
-  explode:  () => playSfx(sfx.explosion),
-  powerup:  () => playSfx(sfx.powerup),
-  gameOver: () => playSfx(sfx.gameover),
+  type:     () => playSfx("click"),
+  error:    () => playSfx("error"),
+  fail:     () => playSfx("fail"),
+  explode:  () => playSfx("explosion"),
+  powerup:  () => playSfx("powerup"),
+  gameOver: () => playSfx("gameover"),
 };
 
 // ============================================================
-//  WEB AUDIO AMBIENCE SYSTEM
-//  Uses AudioContext + BufferSource for seamless looping and
-//  smooth fade-in/out — avoids the HTMLAudioElement autoplay
-//  issues that caused the silent background bug.
+//  AMBIENCE — Web Audio API (reliable looping + fade)
 // ============================================================
+let audioCtx        = null;
+let ambienceSource  = null;
+let ambienceGain    = null;
+let ambienceBuffer  = null;
+let ambienceLoaded  = false;
+let fadeTimer       = null;
+
+async function tryLoadAmbience() {
+  for (const url of AMBIENCE_URLS) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const raw = await res.arrayBuffer();
+      ambienceBuffer = await audioCtx.decodeAudioData(raw);
+      ambienceLoaded = true;
+      console.log("[Audio] Ambience loaded:", url);
+      return;
+    } catch (e) {
+      console.warn("[Audio] Failed:", url, e.message);
+    }
+  }
+  console.warn("[Audio] All ambience sources failed.");
+}
+
 export const atmosphereSystem = {
   isPlaying: false,
 
-  /** Must be called after a user gesture (audio gate handles this). */
   async init() {
-    if (audioCtx) return; // already initialised
+    if (audioCtx) return;
     try {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       ambienceGain = audioCtx.createGain();
       ambienceGain.gain.setValueAtTime(0, audioCtx.currentTime);
       ambienceGain.connect(audioCtx.destination);
-      await this._loadAmbience();
+      await tryLoadAmbience();
     } catch (e) {
-      console.warn("AudioContext failed:", e);
+      console.warn("[Audio] AudioContext init failed:", e);
     }
-  },
-
-  async _loadAmbience() {
-    // Try the primary file; fall back to the dark variant
-    const candidates = [
-      "../audio/space_ambience.ogg",
-      "../audio/dark_ambience.ogg",
-    ];
-    for (const url of candidates) {
-      try {
-        const res = await fetch(url);
-        if (!res.ok) continue;
-        const arrayBuffer = await res.arrayBuffer();
-        ambienceBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-        ambienceLoaded = true;
-        console.log(`[Audio] Loaded ambience: ${url}`);
-        return;
-      } catch (e) {
-        console.warn(`[Audio] Could not load ${url}:`, e);
-      }
-    }
-    console.warn("[Audio] No ambience file could be loaded.");
   },
 
   start() {
     if (this.isPlaying || gameState.isMuted || !ambienceLoaded || !audioCtx) return;
-
-    // Resume context if suspended (browser policy)
     if (audioCtx.state === "suspended") {
-      audioCtx.resume().then(() => this._startSource());
+      audioCtx.resume().then(() => this._play());
     } else {
-      this._startSource();
+      this._play();
     }
   },
 
-  _startSource() {
+  _play() {
     if (this.isPlaying) return;
     try {
-      // Stop any existing source
       if (ambienceSource) {
         try { ambienceSource.stop(); } catch (_) {}
-        ambienceSource = null;
       }
-
       ambienceSource = audioCtx.createBufferSource();
       ambienceSource.buffer = ambienceBuffer;
       ambienceSource.loop = true;
@@ -124,44 +127,36 @@ export const atmosphereSystem = {
       ambienceSource.start(0);
       this.isPlaying = true;
 
-      // Fade in over 2 seconds
-      clearTimeout(ambienceFadeTimer);
+      // Smooth fade in over 2.5s
       ambienceGain.gain.cancelScheduledValues(audioCtx.currentTime);
       ambienceGain.gain.setValueAtTime(0, audioCtx.currentTime);
-      ambienceGain.gain.linearRampToValueAtTime(0.38, audioCtx.currentTime + 2.0);
+      ambienceGain.gain.linearRampToValueAtTime(0.35, audioCtx.currentTime + 2.5);
     } catch (e) {
-      console.warn("[Audio] Could not start ambience:", e);
+      console.warn("[Audio] Playback error:", e);
     }
   },
 
   stop() {
     if (!this.isPlaying || !audioCtx) return;
     this.isPlaying = false;
+    clearTimeout(fadeTimer);
 
-    // Fade out over 1.2 seconds then stop
     ambienceGain.gain.cancelScheduledValues(audioCtx.currentTime);
     ambienceGain.gain.setValueAtTime(ambienceGain.gain.value, audioCtx.currentTime);
-    ambienceGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 1.2);
+    ambienceGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 1.5);
 
-    ambienceFadeTimer = setTimeout(() => {
-      try {
-        if (ambienceSource) {
-          ambienceSource.stop();
-          ambienceSource = null;
-        }
-      } catch (_) {}
-    }, 1300);
+    fadeTimer = setTimeout(() => {
+      try { ambienceSource?.stop(); ambienceSource = null; } catch (_) {}
+    }, 1600);
   },
 
   toggle() {
     gameState.isMuted = !gameState.isMuted;
-
     const btn = document.getElementById("mute-btn");
     if (btn) {
       btn.textContent = gameState.isMuted ? "🔇" : "🔊";
       btn.classList.toggle("muted", gameState.isMuted);
     }
-
     if (gameState.isMuted) {
       this.stop();
     } else if (gameState.isPlaying && !gameState.isPaused) {
@@ -171,7 +166,7 @@ export const atmosphereSystem = {
 };
 
 // ============================================================
-//  AUDIO GATE — must be triggered by user gesture
+//  AUDIO GATE — unlocks AudioContext via user gesture
 // ============================================================
 export function initAudioGate() {
   const gate = document.getElementById("audio-gate");
@@ -179,22 +174,15 @@ export function initAudioGate() {
   if (!gate) return;
 
   const unlock = async () => {
-    // Remove all listeners immediately so it only fires once
     btn?.removeEventListener("click", unlock);
     window.removeEventListener("keydown", unlock);
     window.removeEventListener("pointerdown", unlock);
 
-    // Hide gate with a smooth fade
     gate.classList.add("hidden");
     gate.setAttribute("aria-hidden", "true");
 
-    // Init Web Audio (requires user gesture)
     await atmosphereSystem.init();
-
-    // Start ambience if not muted
-    if (!gameState.isMuted) {
-      atmosphereSystem.start();
-    }
+    if (!gameState.isMuted) atmosphereSystem.start();
   };
 
   if (btn) btn.addEventListener("click", unlock);
