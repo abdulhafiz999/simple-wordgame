@@ -207,7 +207,8 @@ function applyPenalty() {
 // ============================================================
 //  GAME LIFECYCLE
 // ============================================================
-function startGame() {
+async function startGame() {
+  await atmosphereSystem.init();
   resetGame();
   gameState.isPlaying = true;
   showScreen("game-screen");
