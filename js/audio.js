@@ -403,9 +403,25 @@ export const atmosphereSystem = {
       btn.classList.toggle("muted", gameState.isMuted);
     }
     if (gameState.isMuted) {
-      this.stop();
-    } else if (gameState.isPlaying && !gameState.isPaused) {
-      this.start();
+      // Mute all audio
+      if (masterGain) {
+        masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
+        masterGain.gain.setValueAtTime(
+          masterGain.gain.value,
+          audioCtx.currentTime,
+        );
+        masterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.3);
+      }
+    } else {
+      // Unmute all audio
+      if (masterGain) {
+        masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
+        masterGain.gain.setValueAtTime(0, audioCtx.currentTime);
+        masterGain.gain.linearRampToValueAtTime(
+          0.8,
+          audioCtx.currentTime + 0.3,
+        );
+      }
     }
   },
 };
