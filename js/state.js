@@ -10,6 +10,7 @@ export const gameState = {
   isPlaying:         false,
   isPaused:          false,
   isMuted:           false,
+  autoFireEnabled:   true,
   animationId:       null,
   currentInput:      "",
   activeWord:        null,
@@ -45,6 +46,11 @@ export const config = {
     bossDurationMs:      14000,
     bossSpawn:           450,
     bossSpeedBoost:      0.6,
+  },
+  autoFire: {
+    baseInterval: 320,
+    minInterval:  120,
+    levelSpeedup: 6,
   },
 };
 

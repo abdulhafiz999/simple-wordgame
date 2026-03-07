@@ -184,6 +184,23 @@ body::before {
   color: var(--coral);
 }
 
+.auto-fire-btn {
+  top: 80px;
+  width: auto;
+  min-width: 92px;
+  padding: 0 14px;
+  border-radius: var(--r-md);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.auto-fire-btn.off {
+  border-color: rgba(255, 77, 109, 0.5);
+  color: var(--coral);
+  background: rgba(255, 77, 109, 0.1);
+}
+
 /* ============================================================
    START SCREEN
    ============================================================ */
