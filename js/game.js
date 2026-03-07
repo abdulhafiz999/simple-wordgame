@@ -17,7 +17,6 @@ let canvas, ctx;
 let words        = [];
 let particles    = [];
 let lastWordSpawn = 0;
-let lastAutoShot = 0;
 
 // Track used words to avoid repetition
 let recentWords = [];
@@ -37,7 +36,6 @@ export function init() {
     gameState.highScore.toLocaleString();
 
   setupEventListeners();
-  syncAutoFireButton();
 }
 
 function resizeCanvas() {
@@ -69,15 +67,6 @@ function setupEventListeners() {
 
   const muteBtn = document.getElementById("mute-btn");
   if (muteBtn) muteBtn.addEventListener("click", () => atmosphereSystem.toggle());
-
-  const autoFireBtn = document.getElementById("auto-fire-btn");
-  if (autoFireBtn) {
-    autoFireBtn.addEventListener("click", () => {
-      gameState.autoFireEnabled = !gameState.autoFireEnabled;
-      syncAutoFireButton();
-      autoFireBtn.blur();
-    });
-  }
 
   document.getElementById("instructions-btn")
     .addEventListener("click", () => showScreen("instructions-screen"));
@@ -262,7 +251,6 @@ function resetGame() {
   particles    = [];
   recentWords  = [];
   lastWordSpawn = 0;
-  lastAutoShot = 0;
 
   const cv = document.getElementById("game-canvas");
   cv.style.borderColor = "";
@@ -291,55 +279,12 @@ function gameLoop(timestamp = 0) {
   }
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  autoShoot(timestamp);
   updateWords(timestamp);
   updateParticles();
   drawWords();
   drawParticles();
 
   gameState.animationId = requestAnimationFrame(gameLoop);
-}
-
-function autoShoot(timestamp) {
-  if (!gameState.autoFireEnabled || gameState.isFrozen || gameState.modalPauseActive || words.length === 0) return;
-
-  const interval = Math.max(
-    config.autoFire.minInterval,
-    config.autoFire.baseInterval - (gameState.level - 1) * config.autoFire.levelSpeedup
-  );
-  if (timestamp - lastAutoShot < interval) return;
-
-  const target = (gameState.activeWord && words.includes(gameState.activeWord))
-    ? gameState.activeWord
-    : words.reduce((closest, word) => (!closest || word.y > closest.y ? word : closest), null);
-  if (!target) return;
-
-  if (gameState.activeWord && gameState.activeWord !== target) {
-    gameState.activeWord.typedLength = 0;
-  }
-
-  gameState.activeWord = target;
-  target.typedLength = Math.min(target.text.length, target.typedLength + 1);
-  sounds.type();
-
-  if (target.typedLength >= target.text.length) {
-    destroyWord(target);
-    gameState.activeWord   = null;
-    gameState.currentInput = "";
-    updateTypingDisplay();
-  }
-
-  lastAutoShot = timestamp;
-}
-
-function syncAutoFireButton() {
-  const autoFireBtn = document.getElementById("auto-fire-btn");
-  if (!autoFireBtn) return;
-
-  const enabled = gameState.autoFireEnabled;
-  autoFireBtn.textContent = enabled ? "AUTO ON" : "AUTO OFF";
-  autoFireBtn.setAttribute("aria-pressed", enabled ? "true" : "false");
-  autoFireBtn.classList.toggle("off", !enabled);
 }
 
 // ============================================================
